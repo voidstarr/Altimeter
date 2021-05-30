@@ -2,7 +2,6 @@ package tv.voidstar.altimeter;
 
 import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader;
-import org.spongepowered.api.entity.living.player.Player;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,7 +18,7 @@ public class AltimeterData {
 
     public static void init(File rootDir) throws IOException {
         ipAccountListsFile = new File(rootDir, "accounts.conf");
-        if(!ipAccountListsFile.exists())
+        if (!ipAccountListsFile.exists())
             ipAccountListsFile.createNewFile();
 
         loader = HoconConfigurationLoader.builder().setFile(ipAccountListsFile).build();
@@ -43,13 +42,15 @@ public class AltimeterData {
     public static void save() {
         ipAccountsMap.removeChild("ips");
         ConfigurationNode list = ipAccountsMap.getNode("ips");
-        for(String ip : ipAccountMap.keySet()) {
+        for (String ip : ipAccountMap.keySet()) {
             ConfigurationNode ipNode = list.appendListNode();
             ipNode.getNode("ip").setValue(ip);
+            ConfigurationNode accountList = ipNode.getNode("accounts");
             HashMap<UUID, Instant> accountsForIP = ipAccountMap.get(ip);
-            for(UUID uuid : accountsForIP.keySet()) {
-                ipNode.getNode("uuid").setValue(uuid.toString());
-                ipNode.getNode("ttl").setValue(accountsForIP.get(uuid).toEpochMilli());
+            for (UUID uuid : accountsForIP.keySet()) {
+                ConfigurationNode accountForIP = accountList.appendListNode();
+                accountForIP.getNode("uuid").setValue(uuid.toString());
+                accountForIP.getNode("ttl").setValue(accountsForIP.get(uuid).toEpochMilli());
             }
         }
         try {
@@ -64,24 +65,27 @@ public class AltimeterData {
         load();
     }
 
-    public static boolean canLogIn(Player player) {
-        String playerIP = String.valueOf(player.getConnection().getAddress().getAddress());
-        UUID playerUUID = player.getUniqueId();
-        if(ipAccountMap.containsKey(playerIP)) {
-            HashMap<UUID, Instant> accounts = ipAccountMap.get(playerIP);
-            if (!accounts.containsKey(playerUUID)) {
-                if(accounts.size() == AltimeterConfig.getAccountLimit()) {
+    public static boolean canLogIn(UUID player, String ip) {
+        if (ipAccountMap.containsKey(ip)) {
+            HashMap<UUID, Instant> accounts = ipAccountMap.get(ip);
+            Altimeter.getLogger().info("IP has {} accounts logged.", accounts.size());
+            if (!accounts.containsKey(player)) {
+                if (accounts.size() == AltimeterConfig.getAccountLimit()) {
+                    Altimeter.getLogger().info("\tDenied login. too many accounts from this ip");
                     return false;
                 } else {
-                    accounts.put(playerUUID, Instant.now().plus(AltimeterConfig.getAccountTTL()));
+                    Altimeter.getLogger().info("\tAllowed login and logged account for IP");
+                    accounts.put(player, Instant.now().plus(AltimeterConfig.getAccountTTL()));
                     save();
                     return true;
                 }
             }
         } else {
+            Altimeter.getLogger().info("\tnew IP encountered");
+            Altimeter.getLogger().info("\tAllowed login and logged account for IP");
             HashMap<UUID, Instant> newIPMap = new HashMap<>();
-            newIPMap.put(playerUUID, Instant.now().plus(AltimeterConfig.getAccountTTL()));
-            ipAccountMap.put(playerIP, newIPMap);
+            newIPMap.put(player, Instant.now().plus(AltimeterConfig.getAccountTTL()));
+            ipAccountMap.put(ip, newIPMap);
             save();
             return true;
         }
@@ -90,10 +94,10 @@ public class AltimeterData {
 
     public static void checkAndClearAccounts(Instant now) {
         Iterator<Map.Entry<String, HashMap<UUID, Instant>>> ipIterator = ipAccountMap.entrySet().iterator();
-        while(ipIterator.hasNext()) {
+        while (ipIterator.hasNext()) {
             Map.Entry<String, HashMap<UUID, Instant>> ipEntry = ipIterator.next();
             ipEntry.getValue().entrySet().removeIf(accountEntry -> accountEntry.getValue().isAfter(now));
-            if(ipEntry.getValue().isEmpty())
+            if (ipEntry.getValue().isEmpty())
                 ipIterator.remove();
         }
     }

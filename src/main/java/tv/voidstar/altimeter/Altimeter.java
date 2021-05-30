@@ -1,31 +1,27 @@
 package tv.voidstar.altimeter;
 
-import com.google.common.reflect.TypeToken;
 import com.google.inject.Inject;
 import org.slf4j.Logger;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.config.ConfigDir;
-import org.spongepowered.api.data.key.Key;
-import org.spongepowered.api.data.key.KeyFactory;
-import org.spongepowered.api.data.value.mutable.Value;
-import org.spongepowered.api.entity.living.player.Player;
-import org.spongepowered.api.event.filter.cause.Root;
+import org.spongepowered.api.event.Listener;
+import org.spongepowered.api.event.Order;
+import org.spongepowered.api.event.filter.IsCancelled;
 import org.spongepowered.api.event.game.GameReloadEvent;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GameLoadCompleteEvent;
 import org.spongepowered.api.event.game.state.GameStartedServerEvent;
-import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.game.state.GameStoppingServerEvent;
 import org.spongepowered.api.event.network.ClientConnectionEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.text.Text;
-import org.spongepowered.api.text.format.TextStyles;
-import org.spongepowered.api.util.TypeTokens;
+import org.spongepowered.api.util.Tristate;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.UUID;
 
 @Plugin(
         id = "altimeter",
@@ -47,6 +43,14 @@ public class Altimeter {
 
     @Inject
     private Logger logger;
+
+    private static Altimeter getInstance() {
+        return plugin;
+    }
+
+    public static Logger getLogger() {
+        return plugin.logger;
+    }
 
     @Listener
     public void onInit(GameInitializationEvent event) throws IOException {
@@ -76,9 +80,14 @@ public class Altimeter {
         getLogger().info("Altimeter reloaded");
     }
 
-    @Listener
-    public void onClientConnectionEvent(ClientConnectionEvent.Login event, @Root Player player) {
-        if(!AltimeterData.canLogIn(player)) {
+    @Listener(order = Order.FIRST)
+    @IsCancelled(Tristate.UNDEFINED)
+    public void onClientConnectionEvent(ClientConnectionEvent.Login event) {
+        if (event.isCancelled()) return;
+        UUID player = event.getProfile().getUniqueId();
+        String ip = event.getConnection().getAddress().getAddress().getHostAddress();
+        Altimeter.getLogger().info("{} logging in from {}", player, ip);
+        if (!AltimeterData.canLogIn(player, ip)) {
             event.setMessage(
                     Text.of("Too many accounts have logged in from this address."),
                     Text.of("Contact a server admin.")
@@ -93,7 +102,7 @@ public class Altimeter {
                 .ifPresent(pluginContainer -> container = pluginContainer);
         registerCommands();
 
-        Sponge.getScheduler().createTaskBuilder()
+        Sponge.getScheduler().createTaskBuilder().async()
                 .execute(() -> AltimeterData.checkAndClearAccounts(Instant.now()))
                 .interval(AltimeterConfig.getCheckIntervalValue(), AltimeterConfig.getCheckIntervalUnit())
                 .submit(this.container);
@@ -108,13 +117,5 @@ public class Altimeter {
     private void registerCommands() {
         // clear queue for IP
         // set limit for specific IP?
-    }
-
-    private static Altimeter getInstance() {
-        return plugin;
-    }
-
-    public static Logger getLogger() {
-        return plugin.logger;
     }
 }

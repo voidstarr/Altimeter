@@ -15,18 +15,17 @@ import java.util.concurrent.TimeUnit;
 
 public class AltimeterConfig {
 
+    private static final HashMap<String, Integer> accountLimitOverrides = new HashMap<>();
     private static File configFile;
     private static @NonNull HoconConfigurationLoader loader;
     private static CommentedConfigurationNode configs;
-
     private static Duration accountTTL;
     private static int accountLimit;
-    private static HashMap<String, Integer> accountLimitOverrides = new HashMap<>();
     private static long checkIntervalValue;
     private static TimeUnit checkIntervalUnit;
 
-    public static void init(File rootDir) throws IOException {
-        configFile = new File(rootDir, "powersink.conf");
+    public static void init(File rootDir) {
+        configFile = new File(rootDir, "altimeter.conf");
         loader = HoconConfigurationLoader.builder().setFile(configFile).build();
         load();
 
@@ -73,12 +72,18 @@ public class AltimeterConfig {
 
         ConfigurationNode limitOverridesNode = configs.getNode("altimeter", "limitOverrides")
                 .setComment("Override account limit for specific IPs");
-        for(ConfigurationNode overrideNode : limitOverridesNode.getChildrenList()) {
-            String ip = overrideNode.getNode("ip").getString("in.va.li.d");
-            if(InetAddresses.isInetAddress(ip)) {
-                accountLimitOverrides.put(ip, overrideNode.getNode("accountLimit").getInt(5));
-            } else {
-                Altimeter.getLogger().error("Invalid IP in limitOverrides configuration {}", ip);
+        if (!limitOverridesNode.isList()) {
+            ConfigurationNode override = limitOverridesNode.appendListNode();
+            override.getNode("ip").setValue("ex.am.pl.e");
+            override.getNode("accountLimit").setValue(5);
+        } else {
+            for (ConfigurationNode overrideNode : limitOverridesNode.getChildrenList()) {
+                String ip = overrideNode.getNode("ip").getString("in.va.li.d");
+                if (InetAddresses.isInetAddress(ip)) {
+                    accountLimitOverrides.put(ip, overrideNode.getNode("accountLimit").getInt(5));
+                } else {
+                    Altimeter.getLogger().error("Invalid IP in limitOverrides configuration {}", ip);
+                }
             }
         }
         save();
@@ -96,18 +101,18 @@ public class AltimeterConfig {
         return accountLimit;
     }
 
-    public static Duration getAccountTTL() {
-        return accountTTL;
-    }
-
     public static void setAccountLimit(int accountLimit) {
         AltimeterConfig.accountLimit = accountLimit;
+    }
+
+    public static Duration getAccountTTL() {
+        return accountTTL;
     }
 
     public static void setAccountTTL(String accountTTL) {
         try {
             AltimeterConfig.accountTTL = Duration.parse(accountTTL);
-        } catch (DateTimeParseException e){
+        } catch (DateTimeParseException e) {
             Altimeter.getLogger().error("Invalid Duration.parse() string: {}", accountTTL, e);
             Altimeter.getLogger().error("Consider reading https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-");
         }
