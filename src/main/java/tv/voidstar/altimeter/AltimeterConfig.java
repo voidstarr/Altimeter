@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
-import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class AltimeterConfig {
@@ -75,13 +75,13 @@ public class AltimeterConfig {
                 .setComment("Override account limit for specific IPs");
         if (!limitOverridesNode.isList()) {
             ConfigurationNode override = limitOverridesNode.appendListNode();
-            override.getNode("ip").setValue("ex.am.pl.e");
-            override.getNode("accountLimit").setValue(5);
+            override.getNode("ip").setValue("127.0.0.1");
+            override.getNode("limit").setValue(50);
         } else {
             for (ConfigurationNode overrideNode : limitOverridesNode.getChildrenList()) {
                 String ip = overrideNode.getNode("ip").getString("in.va.li.d");
                 if (InetAddresses.isInetAddress(ip)) {
-                    accountLimitOverrides.put(ip, overrideNode.getNode("accountLimit").getInt(5));
+                    accountLimitOverrides.put(ip, overrideNode.getNode("limit").getInt(5));
                 } else {
                     Altimeter.getLogger().error("Invalid IP in limitOverrides configuration {}", ip);
                 }
@@ -91,6 +91,13 @@ public class AltimeterConfig {
     }
 
     public static void save() {
+        configs.getNode("altimeter").removeChild("limitOverrides");
+        ConfigurationNode limitOverridesNode = configs.getNode("altimeter", "limitOverrides");
+        for (Map.Entry<String, Integer> entry : accountLimitOverrides.entrySet()) {
+            ConfigurationNode limitOverrideElement = limitOverridesNode.appendListNode();
+            limitOverrideElement.getNode("ip").setValue(entry.getKey());
+            limitOverrideElement.getNode("limit").setValue(entry.getValue());
+        }
         try {
             loader.save(configs);
         } catch (IOException e) {
@@ -143,5 +150,10 @@ public class AltimeterConfig {
 
     public static void setCheckIntervalValue(long checkIntervalValue) {
         AltimeterConfig.checkIntervalValue = checkIntervalValue;
+    }
+
+    public static void addOverride(String ip, int limit) {
+        accountLimitOverrides.put(ip, limit);
+        save();
     }
 }

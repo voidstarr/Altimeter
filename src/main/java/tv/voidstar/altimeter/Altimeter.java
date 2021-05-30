@@ -3,6 +3,8 @@ package tv.voidstar.altimeter;
 import com.google.inject.Inject;
 import org.slf4j.Logger;
 import org.spongepowered.api.Sponge;
+import org.spongepowered.api.command.args.GenericArguments;
+import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.config.ConfigDir;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.Order;
@@ -17,6 +19,9 @@ import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.util.Tristate;
+import tv.voidstar.altimeter.command.ClearExecutor;
+import tv.voidstar.altimeter.command.MainExecutor;
+import tv.voidstar.altimeter.command.OverrideExecutor;
 
 import java.io.File;
 import java.io.IOException;
@@ -100,6 +105,7 @@ public class Altimeter {
     public void onServerStart(GameStartedServerEvent event) {
         Sponge.getPluginManager().fromInstance(Altimeter.getInstance())
                 .ifPresent(pluginContainer -> container = pluginContainer);
+
         registerCommands();
 
         Sponge.getScheduler().createTaskBuilder().async()
@@ -115,7 +121,26 @@ public class Altimeter {
     }
 
     private void registerCommands() {
-        // clear queue for IP
-        // set limit for specific IP?
+        CommandSpec clearExecutor = CommandSpec.builder()
+                .description(Text.of("clear accounts for all IPs, or for a specific IP"))
+                .executor(new ClearExecutor())
+                .arguments(GenericArguments.string(Text.of("target")))
+                .build();
+
+        CommandSpec overrideExecutor = CommandSpec.builder()
+                .description(Text.of("sets a limit for a given IP. (ignores the global limit)"))
+                .executor(new OverrideExecutor())
+                .arguments(GenericArguments.ip(Text.of("ip")), GenericArguments.integer(Text.of("limit")))
+                .permission("altimeter.override")
+                .build();
+
+        CommandSpec mainExecutor = CommandSpec.builder()
+                .description(Text.of("Altimeter command list"))
+                .executor(new MainExecutor())
+                .child(clearExecutor, "clear", "c")
+                .child(overrideExecutor, "override", "o")
+                .build();
+
+        Sponge.getCommandManager().register(plugin, mainExecutor, "altimeter");
     }
 }

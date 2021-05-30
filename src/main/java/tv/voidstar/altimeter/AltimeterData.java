@@ -79,6 +79,8 @@ public class AltimeterData {
                     save();
                     return true;
                 }
+            } else {
+                return true;
             }
         } else {
             Altimeter.getLogger().info("\tnew IP encountered");
@@ -89,7 +91,6 @@ public class AltimeterData {
             save();
             return true;
         }
-        return false;
     }
 
     public static void checkAndClearAccounts(Instant now) {
@@ -100,5 +101,14 @@ public class AltimeterData {
             if (ipEntry.getValue().isEmpty())
                 ipIterator.remove();
         }
+    }
+
+    public static void clear(String target) {
+        if (target.equals("all")) {
+            ipAccountMap.clear();
+        } else {
+            ipAccountMap.remove(target);
+        }
+        save();
     }
 }
