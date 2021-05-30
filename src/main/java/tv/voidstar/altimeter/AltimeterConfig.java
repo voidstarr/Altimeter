@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class AltimeterConfig {
@@ -97,8 +98,8 @@ public class AltimeterConfig {
         }
     }
 
-    public static int getAccountLimit() {
-        return accountLimit;
+    public static int getAccountLimit(String ip) {
+        return accountLimitOverrides.getOrDefault(ip, accountLimit);
     }
 
     public static void setAccountLimit(int accountLimit) {

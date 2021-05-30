@@ -70,7 +70,7 @@ public class AltimeterData {
             HashMap<UUID, Instant> accounts = ipAccountMap.get(ip);
             Altimeter.getLogger().info("IP has {} accounts logged.", accounts.size());
             if (!accounts.containsKey(player)) {
-                if (accounts.size() == AltimeterConfig.getAccountLimit()) {
+                if (accounts.size() >= AltimeterConfig.getAccountLimit(ip)) {
                     Altimeter.getLogger().info("\tDenied login. too many accounts from this ip");
                     return false;
                 } else {
