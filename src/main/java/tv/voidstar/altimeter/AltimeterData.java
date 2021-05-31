@@ -66,49 +66,80 @@ public class AltimeterData {
     }
 
     public static boolean canLogIn(UUID player, String ip) {
-        if (ipAccountMap.containsKey(ip)) {
-            HashMap<UUID, Instant> accounts = ipAccountMap.get(ip);
-            Altimeter.getLogger().info("IP has {} accounts logged.", accounts.size());
-            if (!accounts.containsKey(player)) {
-                if (accounts.size() >= AltimeterConfig.getAccountLimit(ip)) {
-                    Altimeter.getLogger().info("\tDenied login. too many accounts from this ip");
-                    return false;
-                } else {
-                    Altimeter.getLogger().info("\tAllowed login and logged account for IP");
-                    accounts.put(player, Instant.now().plus(AltimeterConfig.getAccountTTL()));
-                    save();
-                    return true;
-                }
-            } else {
-                return true;
-            }
-        } else {
-            Altimeter.getLogger().info("\tnew IP encountered");
+        HashMap<UUID, Instant> accounts = ipAccountMap.computeIfAbsent(ip, k -> new HashMap<>());
+        if (accounts.containsKey(player)) {
+            return true;
+        } else if (accounts.size() < AltimeterConfig.getAccountLimit(ip)) {
             Altimeter.getLogger().info("\tAllowed login and logged account for IP");
-            HashMap<UUID, Instant> newIPMap = new HashMap<>();
-            newIPMap.put(player, Instant.now().plus(AltimeterConfig.getAccountTTL()));
-            ipAccountMap.put(ip, newIPMap);
+            accounts.put(player, Instant.now().plus(AltimeterConfig.getAccountTTL()));
             save();
             return true;
+        } else {
+            Altimeter.getLogger().info("\tDenied login. too many accounts from this ip");
+            return false;
         }
+
     }
 
     public static void checkAndClearAccounts(Instant now) {
         Iterator<Map.Entry<String, HashMap<UUID, Instant>>> ipIterator = ipAccountMap.entrySet().iterator();
+        boolean dataChanged = false;
         while (ipIterator.hasNext()) {
             Map.Entry<String, HashMap<UUID, Instant>> ipEntry = ipIterator.next();
-            ipEntry.getValue().entrySet().removeIf(accountEntry -> accountEntry.getValue().isAfter(now));
+            HashMap<UUID, Instant> accounts = ipEntry.getValue();
+            accounts.forEach((key, value) -> {
+                if (now.isAfter(value)) {
+                    accounts.remove(key);
+                }
+            });
+            dataChanged = true;
+            if (accounts.isEmpty())
+                ipIterator.remove();
+        }
+        boolean trimmed = trimAllAccountLists();
+        if (dataChanged || trimmed)
+            save();
+    }
+
+    public static boolean trimAllAccountLists() {
+        boolean trimmed = false;
+        Iterator<Map.Entry<String, HashMap<UUID, Instant>>> ipIterator = ipAccountMap.entrySet().iterator();
+        while (ipIterator.hasNext()) {
+            Map.Entry<String, HashMap<UUID, Instant>> ipEntry = ipIterator.next();
+            if (trimAccountList(ipEntry.getKey())) {
+                trimmed = true;
+            }
             if (ipEntry.getValue().isEmpty())
                 ipIterator.remove();
         }
+        return trimmed;
     }
 
-    public static void clear(String target) {
+    public static boolean trimAccountList(String ip) {
+        HashMap<UUID, Instant> accounts = ipAccountMap.get(ip);
+        int elementsToRemove = accounts.size() - AltimeterConfig.getAccountLimit(ip);
+        if (elementsToRemove <= 0) {
+            return false;
+        }
+        accounts.entrySet().stream()
+                .sorted(Comparator.comparingLong(e -> ((Map.Entry<UUID, Instant>) e).getValue().toEpochMilli()).reversed())
+                .limit(elementsToRemove)
+                .forEach(e -> accounts.remove(e.getKey()));
+        return true;
+    }
+
+    public static boolean clear(String target) {
+        boolean success;
         if (target.equals("all")) {
             ipAccountMap.clear();
+            success = true;
         } else {
-            ipAccountMap.remove(target);
+            success = ipAccountMap.remove(target) != null;
+            if (success) {
+                trimAccountList(target);
+            }
         }
         save();
+        return success;
     }
 }

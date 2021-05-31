@@ -8,35 +8,30 @@ import org.spongepowered.api.command.spec.CommandExecutor;
 import org.spongepowered.api.text.Text;
 import tv.voidstar.altimeter.AltimeterData;
 
-import java.util.Locale;
-import java.util.Optional;
-
 public class ClearExecutor implements CommandExecutor {
     @Override
     public CommandResult execute(CommandSource src, CommandContext args) {
-        Optional<String> targetOpt = args.getOne("target");
+        String target = args.<String>getOne("target").get();
 
-        if (targetOpt.isPresent()) {
-            String target = targetOpt.get().toLowerCase(Locale.ROOT);
-            if (target.equals("all")) {
-                if (!src.hasPermission("altimeter.clear.all")) {
-                    src.sendMessage(Text.of("You don't have permission to do that."));
-                    return CommandResult.success();
-                }
-                AltimeterData.clear(target);
-            } else if (InetAddresses.isInetAddress(target)) {
-                if (!src.hasPermission("altimeter.clear.ip")) {
-                    src.sendMessage(Text.of("You don't have permission to do that."));
-                    return CommandResult.success();
-                }
-                AltimeterData.clear(target);
-            } else {
-                src.sendMessage(Text.of("You must supply 'all' or an IP address."));
+        if (target.equals("all")) {
+            if (!src.hasPermission("altimeter.clear.all")) {
+                src.sendMessage(Text.of("[Altimeter] You don't have permission to do that."));
+                return CommandResult.success();
+            }
+        } else if (InetAddresses.isInetAddress(target)) {
+            if (!src.hasPermission("altimeter.clear.ip")) {
+                src.sendMessage(Text.of("[Altimeter] You don't have permission to do that."));
                 return CommandResult.success();
             }
         } else {
-            src.sendMessage(Text.of("You must supply 'all' or an IP address."));
+            src.sendMessage(Text.of("[Altimeter] You must supply 'all' or an IP address."));
             return CommandResult.success();
+        }
+
+        if (AltimeterData.clear(target)) {
+            src.sendMessage(Text.of("[Altimeter] Successfully cleared account entries for ", target));
+        } else {
+            src.sendMessage(Text.of("[Altimeter] Unable to clear account entries for ", target));
         }
 
         return CommandResult.success();
