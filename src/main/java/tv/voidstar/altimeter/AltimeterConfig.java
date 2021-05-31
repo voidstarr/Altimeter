@@ -98,9 +98,10 @@ public class AltimeterConfig {
             Altimeter.getLogger().info("load limit overrides data");
             for (ConfigurationNode overrideNode : limitOverridesNode.getChildrenList()) {
                 String ip = overrideNode.getNode("ip").getString("in.va.li.d");
+                int limit = overrideNode.getNode("limit").getInt(accountLimit);
                 if (InetAddresses.isInetAddress(ip)) {
-                    accountLimitOverrides.put(ip, overrideNode.getNode("limit").getInt(5));
-                    Altimeter.getLogger().info("{} has {} account limit", ip, overrideNode.getNode("limit").getInt(5));
+                    accountLimitOverrides.put(ip, limit);
+                    Altimeter.getLogger().info("{} has {} account limit", ip, limit);
                 } else {
                     Altimeter.getLogger().error("Invalid IP in limitOverrides configuration {}", ip);
                 }
