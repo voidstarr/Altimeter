@@ -1,39 +1,41 @@
 package tv.voidstar.altimeter.command;
 
 import com.google.common.net.InetAddresses;
-import org.spongepowered.api.command.CommandResult;
-import org.spongepowered.api.command.CommandSource;
-import org.spongepowered.api.command.args.CommandContext;
-import org.spongepowered.api.command.spec.CommandExecutor;
-import org.spongepowered.api.text.Text;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.velocitypowered.api.command.CommandSource;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import tv.voidstar.altimeter.AltimeterData;
 
-public class ClearExecutor implements CommandExecutor {
-    @Override
-    public CommandResult execute(CommandSource src, CommandContext args) {
-        String target = args.<String>getOne("target").get();
+public class ClearExecutor implements Command<CommandSource> {
 
+    @Override
+    public int run(CommandContext<CommandSource> context) throws CommandSyntaxException {
+        CommandSource src = context.getSource();
+        String target = StringArgumentType.getString(context, "target");
         if (target.equals("all")) {
             if (!src.hasPermission("altimeter.clear.all")) {
-                src.sendMessage(Text.of("[Altimeter] You don't have permission to do that."));
-                return CommandResult.success();
+                src.sendMessage(Component.text("[Altimeter] You don't have permission to do that.", NamedTextColor.RED));
+                return 1;
             }
         } else if (InetAddresses.isInetAddress(target)) {
             if (!src.hasPermission("altimeter.clear.ip")) {
-                src.sendMessage(Text.of("[Altimeter] You don't have permission to do that."));
-                return CommandResult.success();
+                src.sendMessage(Component.text("[Altimeter] You don't have permission to do that.", NamedTextColor.RED));
+                return 1;
             }
         } else {
-            src.sendMessage(Text.of("[Altimeter] You must supply 'all' or an IP address."));
-            return CommandResult.success();
+            src.sendMessage(Component.text("[Altimeter] You must supply 'all' or an IP address.", NamedTextColor.RED));
+            return 1;
         }
 
         if (AltimeterData.clear(target)) {
-            src.sendMessage(Text.of("[Altimeter] Successfully cleared account entries for ", target));
+            src.sendMessage(Component.text("[Altimeter] Successfully cleared account entries for " + target, NamedTextColor.GREEN));
         } else {
-            src.sendMessage(Text.of("[Altimeter] Unable to clear account entries for ", target));
+            src.sendMessage(Component.text("[Altimeter] Unable to clear account entries for " + target, NamedTextColor.RED));
         }
-
-        return CommandResult.success();
+        return 1;
     }
 }

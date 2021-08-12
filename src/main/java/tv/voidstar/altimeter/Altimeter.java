@@ -1,53 +1,56 @@
 package tv.voidstar.altimeter;
 
 import com.google.inject.Inject;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+import com.velocitypowered.api.command.BrigadierCommand;
+import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.event.PostOrder;
+import com.velocitypowered.api.event.ResultedEvent;
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.LoginEvent;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyReloadEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ProxyServer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.slf4j.Logger;
-import org.spongepowered.api.Sponge;
-import org.spongepowered.api.command.args.GenericArguments;
-import org.spongepowered.api.command.spec.CommandSpec;
-import org.spongepowered.api.config.ConfigDir;
-import org.spongepowered.api.event.Listener;
-import org.spongepowered.api.event.Order;
-import org.spongepowered.api.event.filter.IsCancelled;
-import org.spongepowered.api.event.game.GameReloadEvent;
-import org.spongepowered.api.event.game.state.GameInitializationEvent;
-import org.spongepowered.api.event.game.state.GameLoadCompleteEvent;
-import org.spongepowered.api.event.game.state.GameStartedServerEvent;
-import org.spongepowered.api.event.game.state.GameStoppingServerEvent;
-import org.spongepowered.api.event.network.ClientConnectionEvent;
-import org.spongepowered.api.plugin.Plugin;
-import org.spongepowered.api.plugin.PluginContainer;
-import org.spongepowered.api.text.Text;
-import org.spongepowered.api.util.Tristate;
 import tv.voidstar.altimeter.command.ClearExecutor;
 import tv.voidstar.altimeter.command.MainExecutor;
 import tv.voidstar.altimeter.command.OverrideExecutor;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
 
 @Plugin(
         id = "altimeter",
         name = "Altimeter",
+        version = "1.0",
         description = "Limit number of accounts joining per IP address",
-        authors = {
-                "ZeHeisenberg"
-        }
+        authors = {"ZeHeisenberg"}
 )
 public class Altimeter {
 
     private static Altimeter plugin;
 
-    private PluginContainer container;
-
     @Inject
-    @ConfigDir(sharedRoot = true)
-    private File defaultConfigDir;
+    @DataDirectory
+    private Path defaultConfigDir;
 
     @Inject
     private Logger logger;
+
+    @Inject
+    ProxyServer server;
 
     private static Altimeter getInstance() {
         return plugin;
@@ -57,90 +60,77 @@ public class Altimeter {
         return plugin.logger;
     }
 
-    @Listener
-    public void onInit(GameInitializationEvent event) throws IOException {
+    @Subscribe
+    public void onInit(ProxyInitializeEvent event) throws IOException {
         plugin = this;
 
-        File rootDir = new File(defaultConfigDir, "altimeter");
+        File rootDir = defaultConfigDir.toFile(); //new File(defaultConfigDir.toFile(), "altimeter");
         if (!rootDir.exists()) {
             if (!rootDir.mkdirs()) {
                 Altimeter.getLogger().error("Unable to create root config dir");
             }
         }
 
+        logger.info("Altimeter is starting");
+
         AltimeterConfig.init(rootDir);
         AltimeterData.init(rootDir);
-    }
 
-    @Listener
-    public void onGameLoaded(GameLoadCompleteEvent event) {
         AltimeterConfig.load();
         AltimeterData.load();
+
+        registerCommands();
+
+        this.server.getScheduler()
+                .buildTask(this, () -> AltimeterData.checkAndClearAccounts(Instant.now()))
+                .repeat(AltimeterConfig.getCheckIntervalValue(), AltimeterConfig.getCheckIntervalUnit())
+                .schedule();
     }
 
-    @Listener
-    public void onReload(GameReloadEvent event) {
+    @Subscribe
+    public void onReload(ProxyReloadEvent event) {
         AltimeterConfig.load();
         AltimeterData.reload();
         getLogger().info("Altimeter reloaded");
     }
 
-    @Listener(order = Order.FIRST)
-    @IsCancelled(Tristate.UNDEFINED)
-    public void onClientConnectionEvent(ClientConnectionEvent.Login event) {
-        if (event.isCancelled()) return;
-        UUID player = event.getProfile().getUniqueId();
-        String ip = event.getConnection().getAddress().getAddress().getHostAddress();
+    @Subscribe(order = PostOrder.FIRST)
+    public void onLogin(LoginEvent event) {
+        UUID player = event.getPlayer().getUniqueId();
+        String ip = event.getPlayer().getRemoteAddress().getAddress().getHostAddress();
         Altimeter.getLogger().info("{} logging in from {}", player, ip);
         if (!AltimeterData.canLogIn(player, ip)) {
-            event.setMessage(
-                    Text.of("Too many accounts have logged in from this address."),
-                    Text.of("Contact a server admin.")
-            );
-            event.setCancelled(true);
+            event.setResult(ResultedEvent.ComponentResult.denied(Component.text(
+                    "Too many accounts have logged in from this address. Contact a server admin.",
+                    NamedTextColor.RED
+            )));
         }
     }
 
-    @Listener
-    public void onServerStart(GameStartedServerEvent event) {
-        Sponge.getPluginManager().fromInstance(Altimeter.getInstance())
-                .ifPresent(pluginContainer -> container = pluginContainer);
-
-        registerCommands();
-
-        Sponge.getScheduler().createTaskBuilder().async()
-                .execute(() -> AltimeterData.checkAndClearAccounts(Instant.now()))
-                .interval(AltimeterConfig.getCheckIntervalValue(), AltimeterConfig.getCheckIntervalUnit())
-                .submit(this.container);
-    }
-
-    @Listener
-    public void onStop(GameStoppingServerEvent event) {
+    @Subscribe
+    public void onStop(ProxyShutdownEvent event) {
         AltimeterData.save();
         AltimeterConfig.save();
     }
 
     private void registerCommands() {
-        CommandSpec clearExecutor = CommandSpec.builder()
-                .description(Text.of("clear accounts for all IPs, or for a specific IP"))
-                .executor(new ClearExecutor())
-                .arguments(GenericArguments.string(Text.of("target")))
+        LiteralCommandNode<CommandSource> altimeterCommand = LiteralArgumentBuilder
+                .<CommandSource>literal("altimeter")
+                .executes(new MainExecutor())
+                .then(LiteralArgumentBuilder.<CommandSource>literal("clear")
+                        .then(RequiredArgumentBuilder.<CommandSource, String>argument("target", StringArgumentType.word())
+                                .executes(new ClearExecutor())
+                        )
+                ).then(LiteralArgumentBuilder.<CommandSource>literal("override")
+                        .then(RequiredArgumentBuilder.<CommandSource, String>argument("ip", StringArgumentType.word())
+                                .then(RequiredArgumentBuilder.<CommandSource, Integer>argument("limit", IntegerArgumentType.integer())
+                                        .executes(new OverrideExecutor())
+                                )
+                        )
+                )
                 .build();
 
-        CommandSpec overrideExecutor = CommandSpec.builder()
-                .description(Text.of("sets a limit for a given IP. (ignores the global limit)"))
-                .executor(new OverrideExecutor())
-                .arguments(GenericArguments.ip(Text.of("ip")), GenericArguments.integer(Text.of("limit")))
-                .permission("altimeter.override")
-                .build();
-
-        CommandSpec mainExecutor = CommandSpec.builder()
-                .description(Text.of("Altimeter command list"))
-                .executor(new MainExecutor())
-                .child(clearExecutor, "clear", "c")
-                .child(overrideExecutor, "override", "o")
-                .build();
-
-        Sponge.getCommandManager().register(plugin, mainExecutor, "altimeter");
+        BrigadierCommand altimeter = new BrigadierCommand(altimeterCommand);
+        server.getCommandManager().register(altimeter);
     }
 }

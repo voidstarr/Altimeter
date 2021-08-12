@@ -1,29 +1,22 @@
 package tv.voidstar.altimeter.command;
 
-import org.spongepowered.api.command.CommandResult;
-import org.spongepowered.api.command.CommandSource;
-import org.spongepowered.api.command.args.CommandContext;
-import org.spongepowered.api.command.spec.CommandExecutor;
-import org.spongepowered.api.service.pagination.PaginationList;
-import org.spongepowered.api.text.Text;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.velocitypowered.api.command.CommandSource;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
-import java.util.ArrayList;
-import java.util.List;
+public class MainExecutor implements Command<CommandSource> {
 
-public class MainExecutor implements CommandExecutor {
     @Override
-    public CommandResult execute(CommandSource src, CommandContext args) {
-        List<Text> contents = new ArrayList<>();
-
-        contents.add(Text.of("/altimeter clear [all|x.x.x.x] - clear accounts for all IPs, or for a specific IP."));
-        contents.add(Text.of("/altimeter override <x.x.x.x> <limit> - sets a limit for a given IP. (ignores the global limit)"));
-
-        PaginationList.builder()
-                .title(Text.of("Altimeter command list"))
-                .contents(contents)
-                .padding(Text.of("-"))
-                .sendTo(src);
-
-        return CommandResult.success();
+    public int run(CommandContext<CommandSource> context) throws CommandSyntaxException {
+        CommandSource src = context.getSource();
+        src.sendMessage(Component.text("------ Altimeter command list ------", NamedTextColor.AQUA));
+        src.sendMessage(Component.text("/altimeter clear [all|x.x.x.x] - clear accounts for all IPs, or for a specific IP.", NamedTextColor.GOLD));
+        src.sendMessage(Component.text("/altimeter override <x.x.x.x> <limit> - sets a limit for a given IP. (ignores the global limit)", NamedTextColor.GOLD));
+        src.sendMessage(Component.text("-------------------------------------", NamedTextColor.AQUA));
+        return 1;
     }
+
 }

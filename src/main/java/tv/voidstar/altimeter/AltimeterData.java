@@ -117,10 +117,10 @@ public class AltimeterData {
 
     public static boolean trimAccountList(String ip) {
         HashMap<UUID, Instant> accounts = ipAccountMap.get(ip);
-        int elementsToRemove = accounts.size() - AltimeterConfig.getAccountLimit(ip);
-        if (elementsToRemove <= 0) {
+        if (accounts == null || AltimeterConfig.getAccountLimit(ip) > accounts.size())
             return false;
-        }
+
+        int elementsToRemove = accounts.size() - AltimeterConfig.getAccountLimit(ip);
         accounts.entrySet().stream()
                 .sorted(Comparator.comparingLong(e -> ((Map.Entry<UUID, Instant>) e).getValue().toEpochMilli()).reversed())
                 .limit(elementsToRemove)
