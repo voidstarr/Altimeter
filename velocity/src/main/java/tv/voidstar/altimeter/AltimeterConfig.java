@@ -2,6 +2,7 @@ package tv.voidstar.altimeter;
 
 import com.google.common.net.InetAddresses;
 import ninja.leaping.configurate.ConfigurationNode;
+import ninja.leaping.configurate.ConfigurationOptions;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -25,12 +26,17 @@ public class AltimeterConfig {
     private static int accountLimit;
     private static long checkIntervalValue;
     private static TimeUnit checkIntervalUnit;
+    private static String disconnectMessage;
+    private static String databaseUrl;
+    private static boolean enableDatabase;
 
     public static void init(File rootDir) {
         configFile = new File(rootDir, "altimeter.conf");
-        loader = HoconConfigurationLoader.builder().setFile(configFile).build();
+        loader = HoconConfigurationLoader.builder()
+                .setFile(configFile)
+                .setDefaultOptions(ConfigurationOptions.defaults().withShouldCopyDefaults(true))
+                .build();
         load();
-
     }
 
     public static void load() {
@@ -45,6 +51,12 @@ public class AltimeterConfig {
 
         // defaults
         configs.getNode("altimeter").setComment("General Altimeter configurations.");
+
+        disconnectMessage = configs.getNode("altimeter", "disconnectMessage")
+                .getString("Too many accounts have logged in from this address. Contact a server admin.");
+        enableDatabase = configs.getNode("altimeter", "enableDatabase").getBoolean(true);
+        databaseUrl = configs.getNode("altimeter", "databaseUrl")
+                .getString("jdbc:sqlite:Altimeter.db");
 
         CommentedConfigurationNode checkInterval = configs.getNode("altimeter", "checkInterval")
                 .setComment("How often accounts should be checked and cleared from IP lists.");
@@ -95,7 +107,6 @@ public class AltimeterConfig {
             override.getNode("ip").setValue("127.0.0.1");
             override.getNode("limit").setValue(50);
         } else {
-            Altimeter.getLogger().info("load limit overrides data");
             for (ConfigurationNode overrideNode : limitOverridesNode.getChildrenList()) {
                 String ip = overrideNode.getNode("ip").getString("in.va.li.d");
                 int limit = overrideNode.getNode("limit").getInt(accountLimit);
@@ -178,6 +189,18 @@ public class AltimeterConfig {
 
     public static void setCheckIntervalValue(long checkIntervalValue) {
         AltimeterConfig.checkIntervalValue = checkIntervalValue;
+    }
+
+    public static String getDisconnectMessage() {
+        return disconnectMessage;
+    }
+
+    public static boolean isDatabaseEnabled() {
+        return enableDatabase;
+    }
+
+    public static String getDatabaseUrl() {
+        return databaseUrl;
     }
 
     public static boolean setOverride(String ip, int limit) {

@@ -27,9 +27,11 @@ import tv.voidstar.altimeter.command.OverrideExecutor;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Plugin(
         id = "altimeter",
@@ -73,10 +75,12 @@ public class Altimeter {
 
         logger.info("Altimeter is starting");
 
+        this.loadLibraries();
+
         AltimeterConfig.init(rootDir);
         AltimeterData.init(rootDir);
 
-        AltimeterConfig.load();
+        //AltimeterConfig.load();
         AltimeterData.load();
 
         registerCommands();
@@ -101,7 +105,7 @@ public class Altimeter {
         Altimeter.getLogger().info("{} logging in from {}", player, ip);
         if (!AltimeterData.canLogIn(player, ip)) {
             event.setResult(ResultedEvent.ComponentResult.denied(Component.text(
-                    "Too many accounts have logged in from this address. Contact a server admin.",
+                    AltimeterConfig.getDisconnectMessage(),
                     NamedTextColor.RED
             )));
         }
@@ -111,6 +115,23 @@ public class Altimeter {
     public void onStop(ProxyShutdownEvent event) {
         AltimeterData.save();
         AltimeterConfig.save();
+    }
+
+    private void loadLibraries() {
+        try {
+            logger.info("Loading libraries");
+            Path libraries = this.defaultConfigDir.resolve("libraries");
+            Files.createDirectories(libraries);
+
+            try (Stream<Path> stream = Files.walk(libraries)) {
+                stream.forEach(filePath -> {
+                    logger.info("Adding library file " + filePath.getFileName() + " to the classpath");
+                    server.getPluginManager().addToClasspath(this, filePath);
+                });
+            }
+        } catch (Exception e) {
+            logger.error("Could not load libraries.");
+        }
     }
 
     private void registerCommands() {
